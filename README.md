@@ -79,6 +79,7 @@ npm run dev
 
 App will be available at:
 👉 http://localhost:3000
+```
 
 ## 🧭 API Routes Overview
 
