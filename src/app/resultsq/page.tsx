@@ -4,15 +4,27 @@ import React, { useEffect, useMemo, useState } from "react";
 /* ===== Types ===== */
 type Customer = { id: string; name: string };
 type ResultRow = {
-  sq_id: number; product_id: string; product_name: string;
-  supplier_id: string; supplier_name: string;
-  req_qty: number; resp_qty: number; price: number;
-  qty_point: number; price_point: number; total_point: number; rank_no: number;
+  sq_id: number;
+  category_code: number;
+  product_name: string;          // nama dari Smart Quotation (header/tab)
+  supplier_id: string;
+  supplier_name: string;
+  req_qty: number;
+  resp_qty: number;
+  price: number;
+  qty_point: number;
+  price_point: number;
+  total_point: number;
+  rank_no: number;
+  resp_product_name?: string;    // nama yang diketik supplier
+  name_matched?: boolean;        // true jika sama dengan product_name
 };
 type Contact = {
   user_id: string; name: string; email: string; phone_number: string; address: string;
 };
 type ContactState = { data?: Contact; loading: boolean; reveal: boolean };
+
+type TopMode = 3 | 10 | 'all';
 
 /* ===== Utils ===== */
 const keyOf = (sq: number, pid: string, sid: string) => `${sq}|${pid}|${sid}`;
@@ -87,6 +99,8 @@ export default function ResultSQPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState("");
 
+  const [top, setTop] = useState<TopMode>(3);
+
   /* data */
   const [rows, setRows] = useState<ResultRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -129,10 +143,14 @@ export default function ResultSQPage() {
     if (!cid) { setRows([]); return; }
     try {
       setErr(null); setLoading(true);
-      const res = await fetch(`/api/results?customer_id=${encodeURIComponent(cid)}`, { cache: "no-store" });
+
+      const url = new URL(`/api/results`, window.location.origin);
+      url.searchParams.set("customer_id", cid);
+      if (top !== 'all') url.searchParams.set("top", String(top));
+
+      const res = await fetch(url.toString(), { cache: "no-store" });
       if (!res.ok) throw new Error(await res.text());
       const data: ResultRow[] = await res.json();
-      // normalisasi type angka (jaga-jaga dari string)
       const norm = data.map(r => ({
         ...r,
         rank_no: Number(r.rank_no),
@@ -146,23 +164,24 @@ export default function ResultSQPage() {
       setErr(e?.message || "Gagal memuat results"); setRows([]);
     } finally { setLoading(false); }
   };
-  useEffect(() => { if (customerId) loadResults(customerId); }, [customerId]);
 
-  /* kelompok per SQ + produk */
+  useEffect(() => { if (customerId) loadResults(customerId); }, [customerId, top]);
+
   const sqGroups = useMemo(() => {
     const map = new Map<number, { products: Record<string, { name: string; items: ResultRow[] }>, productOrder: string[] }>();
     for (const r of rows) {
       if (!map.has(r.sq_id)) map.set(r.sq_id, { products: {}, productOrder: [] });
       const g = map.get(r.sq_id)!;
-      if (!g.products[r.product_id]) {
-        g.products[r.product_id] = { name: r.product_name, items: [] };
-        g.productOrder.push(r.product_id);
+      const productKey = `${r.category_code}|${r.product_name.toLowerCase().trim()}`;
+      if (!g.products[productKey]) {
+        g.products[productKey] = { name: r.product_name, items: [] };
+        g.productOrder.push(productKey);
       }
-      g.products[r.product_id].items.push(r);
+      g.products[productKey].items.push(r);
     }
     for (const [, g] of map) {
-      for (const pid of Object.keys(g.products)) {
-        g.products[pid].items.sort((a, b) => a.rank_no - b.rank_no);
+      for (const k of Object.keys(g.products)) {
+        g.products[k].items.sort((a, b) => a.rank_no - b.rank_no);
       }
     }
     return map;
@@ -241,6 +260,7 @@ export default function ResultSQPage() {
               <option key={`${c.id}-${i}`} value={c.id}>{c.name} ({c.id})</option>
             ))}
           </select>
+
           {customerId && (
             <button
               onClick={()=>loadResults(customerId)}
@@ -249,6 +269,29 @@ export default function ResultSQPage() {
               Refresh
             </button>
           )}
+
+          {/* ⬇️ Filter Top */}
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-sm text-gray-700">Top</span>
+            <div className="inline-flex rounded-lg border overflow-hidden">
+              {([3,10,'all'] as TopMode[]).map(opt => {
+                const selected = top === opt;
+                return (
+                  <button
+                    key={`${opt}`}
+                    onClick={()=>setTop(opt)}
+                    aria-pressed={selected}
+                    className={
+                      "px-3 py-1 text-sm transition " +
+                      (selected ? "bg-gray-900 text-white" : "bg-white hover:bg-gray-100")
+                    }
+                  >
+                    {opt === 'all' ? 'All' : opt}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {err && <div className="mb-3 text-red-600 text-sm">{err}</div>}
@@ -281,7 +324,9 @@ export default function ResultSQPage() {
                 {/* Header SQ */}
                 <div className="px-3 pt-3 flex items-center justify-between">
                   <div className="font-medium text-gray-900">SQ #{sq_id}</div>
-                  <div className="text-xs text-gray-500">Top 3 ranking</div>
+                  <div className="text-xs text-gray-500">
+                    {top === 'all' ? 'All ranking' : `Top ${top} ranking`}
+                  </div>
                 </div>
 
                 {/* Product picker */}
@@ -292,9 +337,6 @@ export default function ResultSQPage() {
                     active={pid}
                     onChange={(p)=>setSelectedProduct(prev => ({ ...prev, [sq_id]: p }))}
                   />
-                  <div className="text-xs text-gray-500">
-                    Data sensitif (supplier & harga) disembunyikan. Klik <b>Get Contact</b> lalu centang <b>Tampilkan kontak</b> untuk membuka baris terkait.
-                  </div>
                 </div>
 
                 {/* Tabel ranking (tanpa filter winner/qty) */}
@@ -317,11 +359,11 @@ export default function ResultSQPage() {
                         <th className="p-2 text-center">Action</th>
                       </tr>
                     </thead>
+                    {/* Tabel ranking (tanpa filter winner/qty) */}
                     <tbody>
                       {(current?.items ?? []).map((it) => {
                         const rowKey   = keyOf(sq_id, pid, it.supplier_id);
                         const revealed = contacts[rowKey]?.reveal === true;
-
                         const isWinner  = it.rank_no === 1;
                         const bestPrice = it.price_point === 1;
 
@@ -333,71 +375,61 @@ export default function ResultSQPage() {
                               (isWinner ? "bg-amber-50/40 hover:bg-amber-50" : "hover:bg-gray-50")
                             }
                           >
-                            {/* Rank (tetap terlihat) */}
+                            {/* Rank */}
                             <td className="p-2 font-semibold">
                               {isWinner ? "🥇" : it.rank_no === 2 ? "🥈" : "🥉"} {it.rank_no}
                             </td>
 
-                            {/* Supplier — FULL MASK */}
+                            {/* Supplier — masih HIDDEN */}
                             <td className="p-2">
                               <div className="font-medium">
                                 {revealed ? it.supplier_name : masked(8)}
                               </div>
-                              <div className="text-xs text-gray-500">
+                              {/* <div className="text-xs text-gray-500">
                                 {revealed ? it.supplier_id : masked(6)}
-                              </div>
+                              </div> */}
                             </td>
 
-                            {/* SQID — kalau mau ikut mask, pakai masked(4) */}
-                            <td className="p-2">
-                              {revealed ? it.sq_id : masked(4)}
+                            {/* SQID — terlihat */}
+                            <td className="p-2">{it.sq_id}</td>
+
+                            {/* Product — SELALU tampil product_name dari Smart Quotation */}
+                            <td className="p-2 text-gray-900">
+                              <div className="font-medium">{it.product_name}</div>
+                              {it.name_matched === false && it.resp_product_name && (
+                                <div className="text-xs text-gray-500">
+                                  response supplier: <span className="italic">{it.resp_product_name}</span>
+                                </div>
+                              )}
                             </td>
 
-                            {/* Product — FULL MASK */}
-                            <td className="p-2">
-                              {revealed ? current?.name : masked(6)}
-                            </td>
-
-                            {/* Quantity — FULL MASK */}
+                            {/* Quantity — terlihat */}
                             <td className="p-2 text-right">
-                              {revealed ? it.req_qty : masked(3)} /{" "}
-                              <span className="text-gray-900">
-                                {revealed ? it.resp_qty : masked(3)}
-                              </span>
+                              {it.req_qty} / <span className="text-gray-900">{it.resp_qty}</span>
                             </td>
 
-                            {/* Price — FULL MASK */}
+                            {/* Price — terlihat */}
                             <td className="p-2 text-right">
-                              {revealed ? formatIDR(it.price) : masked(8)}
-                              {revealed && bestPrice && (
+                              {formatIDR(it.price)}
+                              {bestPrice && (
                                 <span className="ml-2 rounded-full bg-emerald-600/10 text-emerald-700 px-2 py-0.5 text-[11px]">
                                   Best price
                                 </span>
                               )}
                             </td>
 
-                            {/* Points — FULL MASK */}
+                            {/* Points — terlihat */}
+                            <td className="p-2 text-center">{it.qty_point}</td>
+                            <td className="p-2 text-center">{it.price_point}</td>
+
+                            {/* Total — terlihat */}
                             <td className="p-2 text-center">
-                              {revealed ? it.qty_point : masked(2)}
-                            </td>
-                            <td className="p-2 text-center">
-                              {revealed ? it.price_point : masked(2)}
+                              <span className="inline-flex items-center rounded-full bg-gray-900 text-white px-2 py-0.5 text-[12px]">
+                                {it.total_point}
+                              </span>
                             </td>
 
-                            {/* Total — FULL MASK badge */}
-                            <td className="p-2 text-center">
-                              {revealed ? (
-                                <span className="inline-flex items-center rounded-full bg-gray-900 text-white px-2 py-0.5 text-[12px]">
-                                  {it.total_point}
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center rounded-full bg-gray-200 text-gray-400 px-2 py-0.5 text-[12px]">
-                                  {maskBullets(2)}
-                                </span>
-                              )}
-                            </td>
-
-                            {/* Action (tetap sama) */}
+                            {/* Action */}
                             <td className="p-2 text-center">
                               <button
                                 onClick={() =>
@@ -414,7 +446,6 @@ export default function ResultSQPage() {
                                     ? "bg-blue-600 border-blue-600 text-white hover:bg-blue-700"
                                     : "bg-white hover:bg-gray-100")
                                 }
-                                aria-label={`Get contact ${it.supplier_id}`}
                               >
                                 Get Contact
                               </button>
@@ -423,7 +454,6 @@ export default function ResultSQPage() {
                         );
                       })}
                     </tbody>
-
                   </table>
                 </div>
               </div>
