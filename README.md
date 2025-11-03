@@ -1,5 +1,12 @@
 # 🧠 Smart Quote v1 — IronAsia Marketplace
 
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)
+![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4.1-38BDF8?logo=tailwindcss&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-DB-4169E1?logo=postgresql&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-Edge%20DB-3FCF8E?logo=supabase&logoColor=white)
+![Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?logo=vercel)
+
 Smart Quote v1 is the intelligent quotation system for **IronAsia Marketplace** — a next-generation B2B procurement platform that matches and ranks supplier responses based on **product completeness**, **quantity accuracy**, and **price competitiveness**.
 
 ---
@@ -35,6 +42,7 @@ Smart Quote v1 is the intelligent quotation system for **IronAsia Marketplace** 
 |-------|-------------|
 | Frontend | Next.js 16 (App Router) |
 | Styling | TailwindCSS 4.1 |
+| Language | TypeScript 5.6 |
 | Backend | Go Echo API (integration ready) |
 | Database | PostgreSQL |
 | ORM / Query | Raw SQL + CTE-based optimization |
@@ -79,6 +87,7 @@ npm run dev
 
 App will be available at:
 👉 http://localhost:3000
+
 ```
 
 ## 🧭 API Routes Overview
