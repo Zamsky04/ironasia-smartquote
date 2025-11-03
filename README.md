@@ -84,13 +84,13 @@ App will be available at:
 
 | Endpoint | Method | Description |
 |-----------|---------|-------------|
-| `/api/results` | GET | Fetch ranked supplier responses |
-| `/api/results/mark-contact` | PUT | Mark supplier contact as revealed |
-| `/api/tokens/add` | POST | Add token balance |
-| `/api/tokens/consume` | POST | Deduct token balance |
-| `/api/tokens/balance` | GET | Retrieve user token balance |
-| `/api/smart-quotes/list` | GET | Get quotation list |
-| `/api/smart-quotes/[id]/items` | GET/POST | Manage quotation items |
+| /api/results | GET | Fetch ranked supplier responses |
+| /api/results/mark-contact | PUT | Mark supplier contact as revealed |
+| /api/tokens/add | POST | Add token balance |
+| /api/tokens/consume | POST | Deduct token balance |
+| /api/tokens/balance | GET | Retrieve user token balance |
+| /api/smart-quotes/list | GET | Get quotation list |
+| /api/smart-quotes/[id]/items | GET/POST | Manage quotation items |
 
 ---
 
