@@ -11,11 +11,13 @@ type InboxRow = {
   customer_name: string;
   area_code: number;
   area_name: string;
-  product_id: string;
-  product_name: string;
+  category_code: number;
+  category_name: string;
+  requested_names: string;   
   requested_qty: number;
   sq_created_date: string;
 
+  response_product_name?: string | null;
   response_qty?: number | null;
   response_price?: number | null;
   response_note?: string | null;
@@ -143,7 +145,8 @@ export default function SupplierInboxPage() {
               <table className="min-w-[720px] w-full text-sm">
                 <thead>
                   <tr className="text-left bg-gray-100 text-gray-700">
-                    <th className="p-2">Product</th>
+                    <th className="p-2">Category</th>
+                    <th className="p-2">Requested (names)</th>
                     <th className="p-2 text-right">Requested Qty</th>
                     <th className="p-2">Price (offer)</th>
                     <th className="p-2">Note (supplier)</th>
@@ -153,10 +156,15 @@ export default function SupplierInboxPage() {
                 <tbody>
                   {items.map((it) => (
                     <tr
-                      key={k("row", it.sq_id, it.product_id, supplierId, it.blast_id)}
+                      key={k("row", it.sq_id, it.category_code, supplierId, it.blast_id)}
                       className="border-t hover:bg-gray-50"
                     >
-                      <td className="p-2 text-gray-900">{it.product_name} ({it.product_id})</td>
+                      <td className="p-2 text-gray-900">
+                        {it.category_name} ({it.category_code})
+                      </td>
+                      <td className="p-2 text-gray-900">
+                        {it.requested_names || <span className="text-gray-400 italic">-</span>}
+                      </td>
                       <td className="p-2 text-right text-gray-900">{it.requested_qty ?? "-"}</td>
                       <td className="p-2">
                         {typeof it.response_price === "number"
