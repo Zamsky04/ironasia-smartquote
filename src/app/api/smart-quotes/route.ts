@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/app/lib/db";
 
-// POST /api/smart-quotes  → create header (SQID)
 export async function POST(req: Request) {
   const pool = getPool();
   const { customer_id, area_code, created_by } = await req.json();

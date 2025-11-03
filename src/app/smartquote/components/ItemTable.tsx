@@ -4,8 +4,8 @@ import AddItemModal from "./AddItemModal";
 type BlastRow = {
   blast_id: number;
   sq_id: number;
-  product_id: string;
   area_code: number;
+  category_code: number;
   supplier_id: string;
   created_date: string;
 };
@@ -20,24 +20,19 @@ export default function ItemTable({ sq }: { sq: any }) {
 
   useEffect(() => {
     setItems(sq.items ?? []);
-  }, [sq.sq_id]); // sengaja tidak depend ke sq.items agar tidak trigger terus
+  }, [sq.sq_id]);
 
-  // ✅ helper re-fetch items untuk hydrating nama produk/kategori setelah save
   const hydrateItems = async () => {
     try {
       const res = await fetch(`/api/smart-quotes/list?customer_id=${sq.customer_id}`, { cache: "no-store" });
       if (!res.ok) throw new Error(await res.text());
       const list = await res.json();
-       const meId = Number(sq.sq_id);
-       const found = Array.isArray(list) ? list.find((r: any) => Number(r.sq_id) === meId) : null;
+      const meId = Number(sq.sq_id);
+      const found = Array.isArray(list) ? list.find((r: any) => Number(r.sq_id) === meId) : null;
       if (found?.items) setItems(found.items);
-    } catch (e) {
-      // diamkan saja: fallback tetap menampilkan product_id dst.
-      console.warn("Hydrate items failed:", e);
-    }
+    } catch (e) { console.warn("Hydrate items failed:", e); }
   };
 
-  // === Ambil data blast utk SQ ini ===
   useEffect(() => {
     let ignore = false;
     (async () => {
@@ -57,13 +52,11 @@ export default function ItemTable({ sq }: { sq: any }) {
     return () => { ignore = true; };
   }, [sq.sq_id]);
 
-  // === Status turunan hanya untuk tampilan ===
   const derivedStatus: "approved" | "rejected" | "checking" = useMemo(() => {
     if (loadingBlast || blasts === null) return "checking";
     return (blasts.length > 0) ? "approved" : "rejected";
   }, [loadingBlast, blasts]);
 
-  // === Style badge ===
   const StatusBadge = () => {
     if (derivedStatus === "checking") {
       return (
@@ -124,7 +117,6 @@ export default function ItemTable({ sq }: { sq: any }) {
                   return;
                 }
 
-                // ✅ Tanpa full reload: re-fetch blast agar badge update
                 setBlasts(null);
                 setLoadingBlast(true);
                 const r2 = await fetch(`/api/blast?sq_id=${sq.sq_id}`, { cache: "no-store" });
@@ -136,7 +128,6 @@ export default function ItemTable({ sq }: { sq: any }) {
                 alert("Network/JS error: " + String(err));
               }
             }}
-
             className={`px-3 py-1 rounded text-white ${approveDisabled ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"}`}
           >
             Send Quotation (Approve)
@@ -147,9 +138,8 @@ export default function ItemTable({ sq }: { sq: any }) {
       <table className="w-full border border-gray-200 text-sm text-gray-900">
         <thead>
           <tr className="bg-gray-100 text-gray-700">
-            <th className="p-2 text-left">Category</th>
-            <th className="p-2 text-left">Sub Category</th>
             <th className="p-2 text-left">Product</th>
+            <th className="p-2 text-left">Product Name</th>
             <th className="p-2 text-left">Size</th>
             <th className="p-2 text-right">Qty</th>
             <th className="p-2 text-left">Note</th>
@@ -158,10 +148,9 @@ export default function ItemTable({ sq }: { sq: any }) {
         </thead>
         <tbody>
           {items.map((it: any) => (
-            <tr key={it.item_id} className="border-t">
+            <tr key={it.item_id ?? `${it.category_id}|${it.product_name}`} className="border-t">
               <td className="p-2">{it.category_name || it.category_id || "-"}</td>
-              <td className="p-2">{it.sub_category_name || it.sub_category_id || "-"}</td>
-              <td className="p-2">{it.product_name || it.product_id}</td>
+              <td className="p-2">{it.product_name || "-"}</td>
               <td className="p-2">{it.size || "-"}</td>
               <td className="p-2 text-right">{it.quantity}</td>
               <td className="p-2">{it.note || "-"}</td>
@@ -171,16 +160,18 @@ export default function ItemTable({ sq }: { sq: any }) {
         </tbody>
       </table>
 
-      <AddItemModal
-        open={open}
-        onClose={() => setOpen(false)}
-        sqid={sq.sq_id}
-        onSaved={async (newItem) => {
-          setItems(prev => [...prev, newItem]); // tampil instan
-          await hydrateItems();                 // lalu isi nama produk/kategori
-        }}
-        createdBy={sq.customer_id}
-      />
+      {open && (
+        <AddItemModal
+          open={true}
+          onClose={() => setOpen(false)}
+          sqid={sq.sq_id}
+          onSaved={async (newItem) => {
+            setItems(prev => [...prev, newItem]); // tampil instan
+            await hydrateItems();                 // re-hydrate label kategori
+          }}
+          createdBy={sq.customer_id}
+        />
+      )}
     </div>
   );
 }
