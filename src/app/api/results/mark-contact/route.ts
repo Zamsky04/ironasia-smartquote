@@ -4,7 +4,7 @@ import { getPool } from "@/app/lib/db";
 type Body = {
   sq_id: number;
   supplier_id: string;
-  product_id: string;
+  product_id: string; 
 };
 
 export async function PUT(req: Request) {
@@ -17,14 +17,28 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "missing sq_id/supplier_id/product_id" }, { status: 400 });
   }
 
+  const [catStr, ...rest] = product_id.split("|");
+  const category_code = Number(catStr);
+  const name_norm = rest.join("|").toLowerCase().trim();
+
+  if (!Number.isFinite(category_code) || !name_norm) {
+    return NextResponse.json({ error: "invalid product_id format" }, { status: 400 });
+  }
+
   const pool = getPool();
+
   await pool.query(
     `
-    UPDATE public.tbl_smart_quotation_response
-    SET get_contact = 1, updated_by = 'system', updated_date = NOW()
-    WHERE sq_id = $1 AND supplier_id = $2 AND product_id = $3
+    UPDATE public.tbl_smart_quotation_response r
+       SET get_contact = 1,
+           updated_by = 'system',
+           updated_date = NOW()
+     WHERE r.sq_id = $1
+       AND r.supplier_id = $2
+       AND r.category_code = $3
+       AND LOWER(TRIM(r.product_name)) = $4
     `,
-    [sq_id, supplier_id, product_id]
+    [sq_id, supplier_id, category_code, name_norm]
   );
 
   return NextResponse.json({ ok: true });

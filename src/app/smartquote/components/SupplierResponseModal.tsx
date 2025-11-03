@@ -78,6 +78,13 @@ export default function SupplierResponseModal(
       }
       onClose();
       onSubmitted?.();
+      try {
+        await fetch("/api/tokens/consume", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: supplierId, amount: 1, reason: "response_quote" }),
+        });
+      } catch {}
     } catch (e: any) {
       alert(String(e?.message || e));
     } finally {

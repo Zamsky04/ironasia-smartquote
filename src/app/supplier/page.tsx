@@ -34,6 +34,19 @@ export default function SupplierInboxPage() {
   const [openModal, setOpenModal] = useState(false);
   const [selectedRow, setSelectedRow] = useState<InboxRow | null>(null);
 
+  const [supplierToken, setSupplierToken] = useState<number | null>(null);
+
+  const loadSupplierToken = async (sid: string) => {
+    if (!sid) { setSupplierToken(null); return; }
+    try {
+      const r = await fetch(`/api/tokens/balance?user_id=${encodeURIComponent(sid)}`, { cache: "no-store" });
+      const j = await r.json();
+      setSupplierToken(j?.token_balance ?? 0);
+    } catch { setSupplierToken(null); }
+  };
+
+  useEffect(() => { loadSupplierToken(supplierId); }, [supplierId]);
+
   // load suppliers
   useEffect(() => {
     (async () => {
@@ -110,6 +123,33 @@ export default function SupplierInboxPage() {
           >
             Refresh
           </button>
+        )}
+
+        {supplierId && (
+          <div className="ml-auto inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm bg-white">
+            <span className="text-gray-600">Tokens</span>
+            <span className="font-semibold">{supplierToken ?? "…"}</span>
+            <button
+              onClick={async () => {
+                const amt = Number(prompt("Top-up berapa? (mis. 5,10,15)", "5") || 0);
+                if (!amt || amt <= 0) return;
+                try {
+                  const r = await fetch("/api/tokens/add", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ user_id: supplierId, amount: amt, reason: "topup_supplier" }),
+                  });
+                  const j = await r.json();
+                  if (typeof j?.token_balance === "number") setSupplierToken(j.token_balance);
+                  else alert("Top-up gagal");
+                } catch (e:any) { alert(String(e?.message || e)); }
+              }}
+              className="ml-2 px-2 py-0.5 rounded border hover:bg-gray-100"
+              title="Top-up token"
+            >
+              + Top-up
+            </button>
+          </div>
         )}
       </div>
 
@@ -206,7 +246,7 @@ export default function SupplierInboxPage() {
         onClose={() => setOpenModal(false)}
         row={selectedRow}
         supplierId={supplierId}
-        onSubmitted={() => loadInbox(supplierId)}
+        onSubmitted={() => { loadInbox(supplierId); loadSupplierToken(supplierId); }}   
       />
     </div>
   </div>

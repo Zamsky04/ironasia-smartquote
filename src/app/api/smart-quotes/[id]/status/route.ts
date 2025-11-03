@@ -4,10 +4,7 @@ import { getPool } from "@/app/lib/db";
 export const runtime = "nodejs";
 type Status = "wait for approval" | "approved" | "rejected";
 
-export async function PATCH(
-  req: Request,
-  context: { params: Promise<{ id: string }> | { id: string } }
-) {
+export async function PATCH(req: Request, context: { params: Promise<{ id: string }> | { id: string } }) {
   const p = (context.params as any);
   const { id } = typeof p.then === "function" ? await p : p;
 

@@ -1,12 +1,15 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
+import TopUpModal from "../smartquote/components/TopUpModal"; 
+import ConfirmSpendModal from "../smartquote/components/ConfirmSpendModal"; 
 
-/* ===== Types ===== */
 type Customer = { id: string; name: string };
 type ResultRow = {
   sq_id: number;
+  area_code: number;          
+  area_name: string;          
   category_code: number;
-  product_name: string;          // nama dari Smart Quotation (header/tab)
+  product_name: string;
   supplier_id: string;
   supplier_name: string;
   req_qty: number;
@@ -16,8 +19,8 @@ type ResultRow = {
   price_point: number;
   total_point: number;
   rank_no: number;
-  resp_product_name?: string;    // nama yang diketik supplier
-  name_matched?: boolean;        // true jika sama dengan product_name
+  resp_product_name?: string;
+  name_matched?: boolean;
 };
 type Contact = {
   user_id: string; name: string; email: string; phone_number: string; address: string;
@@ -26,7 +29,6 @@ type ContactState = { data?: Contact; loading: boolean; reveal: boolean };
 
 type TopMode = 3 | 10 | 'all';
 
-/* ===== Utils ===== */
 const keyOf = (sq: number, pid: string, sid: string) => `${sq}|${pid}|${sid}`;
 const formatIDR = (n: number) => `Rp ${new Intl.NumberFormat("id-ID").format(n)}`;
 const maskBullets = (n = 8) => "•".repeat(n);
@@ -39,7 +41,8 @@ const maskText = (v?: string) => {
 };
 const mask = (v?: string) => (!v ? "******" : "＊".repeat(Math.max(6, Math.min(12, v.length))));
 
-/* ===== Adaptive Product Picker (tanpa filter Winner/Qty) ===== */
+const TOKEN_PRICE = 5000;
+
 function ProductPicker({
   products, order, active, onChange,
 }: {
@@ -101,24 +104,41 @@ export default function ResultSQPage() {
 
   const [top, setTop] = useState<TopMode>(3);
 
-  /* data */
+  const [customerToken, setCustomerToken] = useState<number | null>(null);
+  const loadCustomerToken = async (cid: string) => {
+    if (!cid) { setCustomerToken(null); return; }
+    try {
+      const r = await fetch(`/api/tokens/balance?user_id=${encodeURIComponent(cid)}`, { cache: "no-store" });
+      const j = await r.json();
+      setCustomerToken(typeof j?.token_balance === "number" ? j.token_balance : 0);
+    } catch { setCustomerToken(null); }
+  };
+
+  useEffect(() => { if (customerId) { loadResults(customerId); loadCustomerToken(customerId); } }, [customerId, top]);
+
   const [rows, setRows] = useState<ResultRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  /* kontak + modal */
+  
   const [contacts, setContacts] = useState<Record<string, ContactState>>({});
   const [modal, setModal] = useState<{
     open: boolean; key?: string; sq_id?: number; product_id?: string; supplier_id?: string; title?: string;
   }>({ open: false });
 
-  /* produk aktif per SQ */
-  const [selectedProduct, setSelectedProduct] = useState<Record<number, string>>({});
+  const [selectedArea, setSelectedArea] = useState<Record<number, number>>({});
+  const [selectedProduct, setSelectedProduct] = useState<Record<string, string>>({});
 
-  /* optional: deep link */
   const [bootstrap, setBootstrap] = useState<{ sq?: number; pid?: string; cid?: string } | null>(null);
 
-  /* load customers */
+  const [topupOpen, setTopupOpen] = useState(false);                  
+  const [confirmOpen, setConfirmOpen] = useState(false);              
+  const [confirmCtx, setConfirmCtx] = useState<{                     
+    sq_id?: number; product_id?: string; supplier_id?: string; supplier_name?: string;
+  }>({});   
+  const [confirmExtra, setConfirmExtra] = useState<{
+  productName?: string; areaName?: string; rankNo?: number; bestPrice?: boolean; qtyMatched?: boolean;
+} | null>(null);
+
   useEffect(() => {
     (async () => {
       const res = await fetch("/api/master/customers", { cache: "no-store" });
@@ -168,51 +188,68 @@ export default function ResultSQPage() {
   useEffect(() => { if (customerId) loadResults(customerId); }, [customerId, top]);
 
   const sqGroups = useMemo(() => {
-    const map = new Map<number, { products: Record<string, { name: string; items: ResultRow[] }>, productOrder: string[] }>();
+    const map = new Map<number, {
+      areas: Map<number, { areaName: string, products: Record<string, { name: string; items: ResultRow[] }>, productOrder: string[] }>,
+      areaOrder: number[]
+    }>();
+
     for (const r of rows) {
-      if (!map.has(r.sq_id)) map.set(r.sq_id, { products: {}, productOrder: [] });
+      if (!map.has(r.sq_id)) map.set(r.sq_id, { areas: new Map(), areaOrder: [] });
       const g = map.get(r.sq_id)!;
-      const productKey = `${r.category_code}|${r.product_name.toLowerCase().trim()}`;
-      if (!g.products[productKey]) {
-        g.products[productKey] = { name: r.product_name, items: [] };
-        g.productOrder.push(productKey);
+
+      if (!g.areas.has(r.area_code)) {
+        g.areas.set(r.area_code, { areaName: r.area_name, products: {}, productOrder: [] });
+        g.areaOrder.push(r.area_code);
       }
-      g.products[productKey].items.push(r);
+      const area = g.areas.get(r.area_code)!;
+
+      const productKey = `${r.category_code}|${r.product_name.toLowerCase().trim()}`;
+      if (!area.products[productKey]) {
+        area.products[productKey] = { name: r.product_name, items: [] };
+        area.productOrder.push(productKey);
+      }
+      area.products[productKey].items.push(r);
     }
+
     for (const [, g] of map) {
-      for (const k of Object.keys(g.products)) {
-        g.products[k].items.sort((a, b) => a.rank_no - b.rank_no);
+      for (const [, area] of g.areas) {
+        for (const k of Object.keys(area.products)) {
+          area.products[k].items.sort((a, b) => a.rank_no - b.rank_no);
+        }
       }
     }
     return map;
   }, [rows]);
 
-  /* default product per SQ */
+
   useEffect(() => {
     if (sqGroups.size === 0) return;
-    setSelectedProduct(prev => {
+    setSelectedArea(prev => {
       const next = { ...prev };
       for (const [sq_id, g] of sqGroups.entries()) {
-        if (!next[sq_id]) next[sq_id] = g.productOrder[0];
+        if (!next[sq_id]) next[sq_id] = g.areaOrder[0];
       }
       return next;
     });
   }, [sqGroups]);
 
-  /* bootstrap deep link */
   useEffect(() => {
-    if (!bootstrap || sqGroups.size === 0) return;
-    const { sq, pid } = bootstrap;
-    if (sq && sqGroups.has(sq)) {
-      const g = sqGroups.get(sq)!;
-      setSelectedProduct(prev => ({ ...prev, [sq]: pid && g.products[pid] ? pid : g.productOrder[0] }));
-      const el = document.getElementById(`sq-${sq}`);
-      if (el) setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-    }
-    setBootstrap(null);
-  }, [bootstrap, sqGroups]);
+    if (sqGroups.size === 0) return;
+    setSelectedProduct(prev => {
+      const next = { ...prev };
+      for (const [sq_id, g] of sqGroups.entries()) {
+        const areaCode = selectedArea[sq_id] ?? g.areaOrder[0];
+        const area = g.areas.get(areaCode);
+        if (area) {
+          const first = area.productOrder[0];
+          const key = `${sq_id}__${areaCode}`;
+          if (!next[key]) next[key] = first;
+        }
+      }
+      return next;
+    });
+  }, [sqGroups, selectedArea]);
 
-  /* modal contact */
   const openContactModal = async (ctx: { sq_id: number; product_id: string; supplier_id: string; supplier_name: string; }) => {
     const k = keyOf(ctx.sq_id, ctx.product_id, ctx.supplier_id);
     setModal({ open: true, key: k, ...ctx, title: undefined });
@@ -240,6 +277,68 @@ export default function ResultSQPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sq_id: modal.sq_id, product_id: modal.product_id, supplier_id: modal.supplier_id })
       }).catch(()=>{});
+
+      if (customerId) {
+        try {
+          const r = await fetch("/api/tokens/consume", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: customerId, amount: TOKEN_PRICE, reason: "get_contact" }), // <<<
+          });
+          const j = await r.json();
+          if (typeof j?.token_balance === "number") setCustomerToken(j.token_balance);
+        } catch {}
+      }
+    }
+  };
+
+  const askSpendThenReveal = (ctx: {                                  // <<<
+    sq_id: number; product_id: string; supplier_id: string; supplier_name: string;
+  }) => {
+    setConfirmCtx(ctx);
+    setConfirmOpen(true);
+  };
+
+  const performReveal = async () => {                                  // <<<
+    const { sq_id, product_id, supplier_id, supplier_name } = confirmCtx;
+    if (!sq_id || !product_id || !supplier_id) return;
+
+    try {
+      await fetch("/api/results/mark-contact", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sq_id, product_id, supplier_id }),
+      });
+    } catch {}
+
+    if (customerId) {
+      try {
+        const r = await fetch("/api/tokens/consume", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: customerId, amount: TOKEN_PRICE, reason: "get_contact" }),
+        });
+        const j = await r.json();
+        if (typeof j?.token_balance === "number") setCustomerToken(j.token_balance);
+      } catch {}
+    }
+
+    const k = keyOf(sq_id, String(product_id), String(supplier_id));
+    setContacts(prev => ({ ...prev, [k]: { ...(prev[k] ?? {}), reveal: true } }));
+  };
+
+  const handleTopUp = async (amt: number) => {                         // <<<
+    if (!customerId || !amt || amt < 5000) return;
+    try {
+      const r = await fetch("/api/tokens/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: customerId, amount: amt, reason: "topup_customer" }),
+      });
+      const j = await r.json();
+      if (typeof j?.token_balance === "number") setCustomerToken(j.token_balance);
+    } catch (e:any) {
+      alert(String(e?.message || e));
     }
   };
 
@@ -292,6 +391,21 @@ export default function ResultSQPage() {
               })}
             </div>
           </div>
+          {customerId && (
+            <div className="ml-auto inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm bg-white">
+              <span className="text-gray-600">Saldo</span>
+              <span className="font-semibold">
+                {typeof customerToken === "number" ? `Rp ${customerToken.toLocaleString("id-ID")}` : "…"}
+              </span>
+              <button
+                onClick={() => setTopupOpen(true)}                     // <<<
+                className="ml-1 px-2 py-0.5 rounded-full border bg-gray-900 text-white hover:bg-black"
+                title="Top-Up saldo"
+              >
+                + Top-Up
+              </button>
+            </div>
+          )}
         </div>
 
         {err && <div className="mb-3 text-red-600 text-sm">{err}</div>}
@@ -316,8 +430,14 @@ export default function ResultSQPage() {
         <div className="space-y-6">
           {[...sqGroups.keys()].sort((a,b)=>b-a).map(sq_id => {
             const g = sqGroups.get(sq_id)!;
-            const pid = selectedProduct[sq_id] ?? g.productOrder[0];
-            const current = g.products[pid];
+
+            const areaCode = selectedArea[sq_id] ?? g.areaOrder[0];
+            const area = g.areas.get(areaCode);
+            if (!area) return null;
+
+            const productKeyKey = `${sq_id}__${areaCode}`;
+            const pid = selectedProduct[productKeyKey] ?? area.productOrder[0];
+            const current = area.products[pid];
 
             return (
               <div id={`sq-${sq_id}`} key={sq_id} className="rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -329,20 +449,46 @@ export default function ResultSQPage() {
                   </div>
                 </div>
 
-                {/* Product picker */}
-                <div className="px-3 pb-2 mt-2 border-b flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                {/* Area Picker */}
+                <div className="px-3 pb-2 mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-gray-700">Area:</span>
+                  <div className="flex gap-2 overflow-x-auto">
+                    {g.areaOrder.map(ac => {
+                      const selected = ac === areaCode;
+                      const name = g.areas.get(ac)?.areaName || ac;
+                      return (
+                        <button
+                          key={ac}
+                          onClick={() => setSelectedArea(prev => ({ ...prev, [sq_id]: ac }))}
+                          aria-pressed={selected}
+                          className={
+                            "px-3 py-1 rounded-full border text-sm whitespace-nowrap transition " +
+                            (selected ? "bg-gray-900 text-white border-gray-900" : "bg-white hover:bg-gray-100")
+                          }
+                          title={String(name)}
+                        >
+                          {name} <span className="text-xs text-gray-500">({ac})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Product picker untuk area terpilih */}
+                <div className="px-3 pb-2 border-b flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <ProductPicker
-                    products={g.products}
-                    order={g.productOrder}
+                    products={area.products}
+                    order={area.productOrder}
                     active={pid}
-                    onChange={(p)=>setSelectedProduct(prev => ({ ...prev, [sq_id]: p }))}
+                    onChange={(p)=>setSelectedProduct(prev => ({ ...prev, [productKeyKey]: p }))}
                   />
                 </div>
 
-                {/* Tabel ranking (tanpa filter winner/qty) */}
+                {/* Tabel ranking untuk (SQ, Area, Product) terpilih */}
                 <div className="p-3 overflow-x-auto">
                   <div className="text-sm text-gray-700 mb-2">
-                    Produk terpilih: <span className="font-medium">{current?.name}</span> <span className="text-gray-500">({pid})</span>
+                    Area: <span className="font-medium">{area.areaName} ({areaCode})</span> •
+                    {' '}Product: <span className="font-medium">{current?.name}</span> <span className="text-gray-500">({pid})</span>
                   </div>
                   <table className="min-w-[920px] w-full text-sm">
                     <thead>
@@ -359,9 +505,9 @@ export default function ResultSQPage() {
                         <th className="p-2 text-center">Action</th>
                       </tr>
                     </thead>
-                    {/* Tabel ranking (tanpa filter winner/qty) */}
                     <tbody>
                       {(current?.items ?? []).map((it) => {
+                        // Row key & state contact
                         const rowKey   = keyOf(sq_id, pid, it.supplier_id);
                         const revealed = contacts[rowKey]?.reveal === true;
                         const isWinner  = it.rank_no === 1;
@@ -375,25 +521,19 @@ export default function ResultSQPage() {
                               (isWinner ? "bg-amber-50/40 hover:bg-amber-50" : "hover:bg-gray-50")
                             }
                           >
-                            {/* Rank */}
                             <td className="p-2 font-semibold">
                               {isWinner ? "🥇" : it.rank_no === 2 ? "🥈" : "🥉"} {it.rank_no}
                             </td>
 
-                            {/* Supplier — masih HIDDEN */}
+                            {/* Supplier masked */}
                             <td className="p-2">
                               <div className="font-medium">
                                 {revealed ? it.supplier_name : masked(8)}
                               </div>
-                              {/* <div className="text-xs text-gray-500">
-                                {revealed ? it.supplier_id : masked(6)}
-                              </div> */}
                             </td>
 
-                            {/* SQID — terlihat */}
                             <td className="p-2">{it.sq_id}</td>
 
-                            {/* Product — SELALU tampil product_name dari Smart Quotation */}
                             <td className="p-2 text-gray-900">
                               <div className="font-medium">{it.product_name}</div>
                               {it.name_matched === false && it.resp_product_name && (
@@ -403,12 +543,10 @@ export default function ResultSQPage() {
                               )}
                             </td>
 
-                            {/* Quantity — terlihat */}
                             <td className="p-2 text-right">
                               {it.req_qty} / <span className="text-gray-900">{it.resp_qty}</span>
                             </td>
 
-                            {/* Price — terlihat */}
                             <td className="p-2 text-right">
                               {formatIDR(it.price)}
                               {bestPrice && (
@@ -418,28 +556,38 @@ export default function ResultSQPage() {
                               )}
                             </td>
 
-                            {/* Points — terlihat */}
                             <td className="p-2 text-center">{it.qty_point}</td>
                             <td className="p-2 text-center">{it.price_point}</td>
 
-                            {/* Total — terlihat */}
                             <td className="p-2 text-center">
                               <span className="inline-flex items-center rounded-full bg-gray-900 text-white px-2 py-0.5 text-[12px]">
                                 {it.total_point}
                               </span>
                             </td>
 
-                            {/* Action */}
                             <td className="p-2 text-center">
                               <button
-                                onClick={() =>
+                                onClick={() => {
                                   openContactModal({
                                     sq_id,
                                     product_id: pid,
                                     supplier_id: it.supplier_id,
                                     supplier_name: it.supplier_name,
-                                  })
-                                }
+                                  });
+                                  askSpendThenReveal({
+                                    sq_id,
+                                    product_id: pid,
+                                    supplier_id: it.supplier_id,
+                                    supplier_name: it.supplier_name,
+                                  });
+                                  setConfirmExtra({
+                                    productName: it.product_name,
+                                    areaName: g.areas.get(areaCode)?.areaName,
+                                    rankNo: it.rank_no,
+                                    bestPrice: it.price_point === 1,
+                                    qtyMatched: it.qty_point === 1,
+                                  });
+                                }}
                                 className={
                                   "px-3 py-1 rounded border transition " +
                                   (isWinner
@@ -461,6 +609,29 @@ export default function ResultSQPage() {
           })}
         </div>
       </div>
+
+      {/* ==== Modal Top-Up ==== */}
+      <TopUpModal
+        open={topupOpen}
+        onClose={() => setTopupOpen(false)}
+        onConfirm={handleTopUp}
+        currentBalance={customerToken ?? 0}
+      />
+
+      {/* ==== Modal Konfirmasi Spend ==== */}
+      <ConfirmSpendModal
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={performReveal}
+        price={TOKEN_PRICE}
+        currentBalance={customerToken ?? 0}
+        // teaser:
+        productName={confirmExtra?.productName}
+        areaName={confirmExtra?.areaName}
+        rankNo={confirmExtra?.rankNo}
+        bestPrice={confirmExtra?.bestPrice}
+        qtyMatched={confirmExtra?.qtyMatched}
+      />
 
       {/* MODAL CONTACT */}
       {modal.open && modal.key && (

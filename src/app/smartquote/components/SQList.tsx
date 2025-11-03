@@ -15,11 +15,15 @@ export default function SQList({ refresh, customerId }: { refresh: number; custo
   return (
     <div className="space-y-4">
       {data.map((sq) => (
-        <div key={sq.sq_id} className="border border-gray-200 rounded-lg p-4 bg-white text-gray-900 shadow-sm">
+        <div key={`sq-${sq.sq_id}`} className="border border-gray-200 rounded-lg p-4 bg-white text-gray-900 shadow-sm">
           <div className="flex justify-between items-center">
             <div className="space-y-0.5">
               <p className="font-semibold">SQID: <span className="font-normal">{sq.sq_id}</span></p>
-              <p><span className="font-semibold">Customer:</span> {sq.customer_name || sq.customer_id} &nbsp;|&nbsp; <span className="font-semibold">Area:</span> {sq.area_code}</p>
+              <p>
+                <span className="font-semibold">Customer:</span> {sq.customer_name || sq.customer_id}
+                &nbsp;|&nbsp;
+                <span className="font-semibold">Areas:</span> {Array.isArray(sq.area_codes) ? sq.area_codes.join(", ") : sq.area_code}
+              </p>
               <p><span className="font-semibold">Status:</span> {sq.status}</p>
             </div>
           </div>

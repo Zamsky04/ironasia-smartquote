@@ -15,6 +15,7 @@ export default function ItemTable({ sq }: { sq: any }) {
   const [blasts, setBlasts] = useState<BlastRow[] | null>(null);
   const [loadingBlast, setLoadingBlast] = useState(false);
   const [errorBlast, setErrorBlast] = useState<string | null>(null);
+  const [approving, setApproving] = useState(false);
 
   const [items, setItems] = useState<any[]>(sq.items ?? []);
 
@@ -101,10 +102,11 @@ export default function ItemTable({ sq }: { sq: any }) {
           </button>
 
           <button
-            disabled={approveDisabled}
+            disabled={approveDisabled || approving}
             title={approveDisabled ? "Sudah Approved (blast ada) atau sedang cek" : "Approve & Blast"}
             onClick={async () => {
               try {
+                setApproving(true); 
                 const res = await fetch(`/api/smart-quotes/${sq.sq_id}/status`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
@@ -126,11 +128,17 @@ export default function ItemTable({ sq }: { sq: any }) {
               } catch (err) {
                 console.error(err);
                 alert("Network/JS error: " + String(err));
+                } finally {
+                  setApproving(false); 
               }
             }}
-            className={`px-3 py-1 rounded text-white ${approveDisabled ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"}`}
+            className={`px-3 py-1 rounded text-white ${
+              approveDisabled || approving
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-green-600 hover:bg-green-700"
+            }`}
           >
-            Send Quotation (Approve)
+            {approving ? "Sending..." : "Send Quotation (Approve)"}
           </button>
         </div>
       </div>
@@ -141,17 +149,23 @@ export default function ItemTable({ sq }: { sq: any }) {
             <th className="p-2 text-left">Product</th>
             <th className="p-2 text-left">Product Name</th>
             <th className="p-2 text-left">Size</th>
+            <th className="p-2 text-left">Unit</th>
             <th className="p-2 text-right">Qty</th>
             <th className="p-2 text-left">Note</th>
             <th className="p-2 text-left">Status</th>
           </tr>
         </thead>
         <tbody>
-          {items.map((it: any) => (
-            <tr key={it.item_id ?? `${it.category_id}|${it.product_name}`} className="border-t">
+          {items.map((it: any, idx: number) => (
+            <tr
+              key={it.item_id ? `item-${it.item_id}` :
+                  `temp-${it.category_id}-${(it.product_name||'').slice(0,32)}-${it.size ?? ''}-${idx}`}
+              className="border-t"
+            >
               <td className="p-2">{it.category_name || it.category_id || "-"}</td>
               <td className="p-2">{it.product_name || "-"}</td>
               <td className="p-2">{it.size || "-"}</td>
+              <td className="p-2">{it.unit_name || it.unit_id || "-"}</td>
               <td className="p-2 text-right">{it.quantity}</td>
               <td className="p-2">{it.note || "-"}</td>
               <td className="p-2">{it.status}</td>
@@ -165,9 +179,8 @@ export default function ItemTable({ sq }: { sq: any }) {
           open={true}
           onClose={() => setOpen(false)}
           sqid={sq.sq_id}
-          onSaved={async (newItem) => {
-            setItems(prev => [...prev, newItem]); // tampil instan
-            await hydrateItems();                 // re-hydrate label kategori
+          onSaved={async () => {
+            await hydrateItems(); 
           }}
           createdBy={sq.customer_id}
         />
