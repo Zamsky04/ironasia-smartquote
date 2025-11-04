@@ -104,6 +104,9 @@ export default function ResultSQPage() {
 
   const [top, setTop] = useState<TopMode>(3);
 
+  const REVEAL_COST_TOKENS = 1;
+  const canAffordReveal = (bal: number | null | undefined) => (bal ?? 0) >= REVEAL_COST_TOKENS;
+
   const [customerToken, setCustomerToken] = useState<number | null>(null);
   const loadCustomerToken = async (cid: string) => {
     if (!cid) { setCustomerToken(null); return; }
@@ -268,28 +271,13 @@ export default function ResultSQPage() {
     }
   };
 
-  const setReveal = async (checked: boolean) => {
+  const setReveal = (checked: boolean) => {
     if (!modal.key) return;
-    setContacts(prev => ({ ...prev, [modal.key!]: { ...(prev[modal.key!] ?? {}), reveal: checked } }));
-    if (checked && modal.sq_id && modal.product_id && modal.supplier_id) {
-      fetch("/api/results/mark-contact", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sq_id: modal.sq_id, product_id: modal.product_id, supplier_id: modal.supplier_id })
-      }).catch(()=>{});
-
-      if (customerId) {
-        try {
-          const r = await fetch("/api/tokens/consume", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: customerId, amount: TOKEN_PRICE, reason: "get_contact" }), // <<<
-          });
-          const j = await r.json();
-          if (typeof j?.token_balance === "number") setCustomerToken(j.token_balance);
-        } catch {}
-      }
-    }
+    // Kalau sudah revealed, biarkan tetap true; kalau belum, abaikan (reveal via modal konfirmasi)
+    setContacts(prev => ({ 
+      ...prev, 
+      [modal.key!]: { ...(prev[modal.key!] ?? {}), reveal: checked && (prev[modal.key!]?.reveal === true) } 
+    }));
   };
 
   const askSpendThenReveal = (ctx: {                                  // <<<
@@ -299,10 +287,17 @@ export default function ResultSQPage() {
     setConfirmOpen(true);
   };
 
-  const performReveal = async () => {                                  // <<<
-    const { sq_id, product_id, supplier_id, supplier_name } = confirmCtx;
+  const performReveal = async () => {
+    const { sq_id, product_id, supplier_id } = confirmCtx;
     if (!sq_id || !product_id || !supplier_id) return;
 
+    if (!canAffordReveal(customerToken)) {
+      setConfirmOpen(false);
+      setTopupOpen(true);
+      return;
+    }
+
+    // 1) tandai sudah reveal di server
     try {
       await fetch("/api/results/mark-contact", {
         method: "PUT",
@@ -311,29 +306,34 @@ export default function ResultSQPage() {
       });
     } catch {}
 
-    if (customerId) {
-      try {
-        const r = await fetch("/api/tokens/consume", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: customerId, amount: TOKEN_PRICE, reason: "get_contact" }),
-        });
-        const j = await r.json();
-        if (typeof j?.token_balance === "number") setCustomerToken(j.token_balance);
-      } catch {}
-    }
+    // 2) konsumsi token
+    try {
+      const r = await fetch("/api/tokens/consume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: customerId, tokens: REVEAL_COST_TOKENS, reason: "get_contact" }),
+      });
+      const j = await r.json();
+      if (typeof j?.token_balance === "number") setCustomerToken(j.token_balance);
+      if (j?.error === "insufficient_tokens") {
+        // server-side guard
+        setTopupOpen(true);
+        return;
+      }
+    } catch {}
 
+    // 3) tampilkan kontak di UI
     const k = keyOf(sq_id, String(product_id), String(supplier_id));
     setContacts(prev => ({ ...prev, [k]: { ...(prev[k] ?? {}), reveal: true } }));
   };
 
-  const handleTopUp = async (amt: number) => {                         // <<<
-    if (!customerId || !amt || amt < 5000) return;
+  const handleTopUp = async (tokens: number) => {
+    if (!customerId || !tokens || tokens < 1) return;
     try {
       const r = await fetch("/api/tokens/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: customerId, amount: amt, reason: "topup_customer" }),
+        body: JSON.stringify({ user_id: customerId, tokens, reason: "topup_customer" }),
       });
       const j = await r.json();
       if (typeof j?.token_balance === "number") setCustomerToken(j.token_balance);
@@ -393,14 +393,13 @@ export default function ResultSQPage() {
           </div>
           {customerId && (
             <div className="ml-auto inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm bg-white">
-              <span className="text-gray-600">Saldo</span>
-              <span className="font-semibold">
-                {typeof customerToken === "number" ? `Rp ${customerToken.toLocaleString("id-ID")}` : "…"}
-              </span>
+              <span className="text-gray-600">Token</span>
+              <span className="font-semibold">{typeof customerToken === "number" ? `${customerToken} token` : "…"}</span>
+              <span className="text-xs text-gray-500">({`≈ Rp ${( (customerToken??0)*1000 ).toLocaleString("id-ID")}`})</span>
               <button
-                onClick={() => setTopupOpen(true)}                     // <<<
+                onClick={() => setTopupOpen(true)}
                 className="ml-1 px-2 py-0.5 rounded-full border bg-gray-900 text-white hover:bg-black"
-                title="Top-Up saldo"
+                title="Top-Up token"
               >
                 + Top-Up
               </button>
@@ -568,18 +567,7 @@ export default function ResultSQPage() {
                             <td className="p-2 text-center">
                               <button
                                 onClick={() => {
-                                  openContactModal({
-                                    sq_id,
-                                    product_id: pid,
-                                    supplier_id: it.supplier_id,
-                                    supplier_name: it.supplier_name,
-                                  });
-                                  askSpendThenReveal({
-                                    sq_id,
-                                    product_id: pid,
-                                    supplier_id: it.supplier_id,
-                                    supplier_name: it.supplier_name,
-                                  });
+                                  // siapkan teaser utk modal
                                   setConfirmExtra({
                                     productName: it.product_name,
                                     areaName: g.areas.get(areaCode)?.areaName,
@@ -587,6 +575,21 @@ export default function ResultSQPage() {
                                     bestPrice: it.price_point === 1,
                                     qtyMatched: it.qty_point === 1,
                                   });
+
+                                  // siapkan konteks reveal
+                                  setConfirmCtx({
+                                    sq_id,
+                                    product_id: pid,
+                                    supplier_id: it.supplier_id,
+                                    supplier_name: it.supplier_name,
+                                  });
+
+                                  // saldo cukup? buka Confirm; kalau tidak, buka Top-Up
+                                  if (canAffordReveal(customerToken)) {
+                                    setConfirmOpen(true);
+                                  } else {
+                                    setTopupOpen(true);
+                                  }
                                 }}
                                 className={
                                   "px-3 py-1 rounded border transition " +
@@ -615,7 +618,7 @@ export default function ResultSQPage() {
         open={topupOpen}
         onClose={() => setTopupOpen(false)}
         onConfirm={handleTopUp}
-        currentBalance={customerToken ?? 0}
+        currentTokens={customerToken ?? 0}
       />
 
       {/* ==== Modal Konfirmasi Spend ==== */}
@@ -623,9 +626,8 @@ export default function ResultSQPage() {
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={performReveal}
-        price={TOKEN_PRICE}
-        currentBalance={customerToken ?? 0}
-        // teaser:
+        tokens={REVEAL_COST_TOKENS}
+        currentTokens={customerToken ?? 0}
         productName={confirmExtra?.productName}
         areaName={confirmExtra?.areaName}
         rankNo={confirmExtra?.rankNo}
@@ -673,7 +675,43 @@ export default function ResultSQPage() {
                       type="checkbox"
                       className="h-4 w-4"
                       checked={!!contacts[modal.key]?.reveal}
-                      onChange={(e)=>setReveal(e.target.checked)}
+                      disabled={!!contacts[modal.key]?.reveal}  // setelah terbuka, tidak bisa “unreveal”
+                      onChange={(e) => {
+                        // Kalau sudah reveal, abaikan (checkbox dikunci).
+                        if (contacts[modal.key!]?.reveal) return;
+
+                        // User mencoba centang -> cek saldo
+                        if (e.target.checked) {
+                          setConfirmCtx({
+                            sq_id: modal.sq_id!,
+                            product_id: modal.product_id!,
+                            supplier_id: modal.supplier_id!,
+                            supplier_name: modal.title, // optional
+                          });
+
+                          // siapkan teaser
+                          const row = rows.find(r => r.sq_id === modal.sq_id && r.supplier_id === modal.supplier_id);
+                          setConfirmExtra({
+                            productName: row?.product_name,
+                            areaName: row?.area_name,
+                            rankNo: row?.rank_no,
+                            bestPrice: row?.price_point === 1,
+                            qtyMatched: row?.qty_point === 1,
+                          });
+
+                          if (canAffordReveal(customerToken)) {
+                            setConfirmOpen(true);
+                          } else {
+                            // saldo kurang -> arahkan ke Top-Up
+                            setTopupOpen(true);
+                          }
+
+                          // penting: karena ini controlled checkbox (checked = reveal),
+                          // React akan segera merender ulang dan mengembalikan ke `false`
+                          // sehingga tampilan tidak “terlanjur” tercentang.
+                        }
+                      }}
+
                     />
                     <label htmlFor="reveal-contact" className="text-sm">Tampilkan kontak</label>
                   </div>
