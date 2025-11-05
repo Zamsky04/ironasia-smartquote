@@ -1,4 +1,4 @@
-# 🧠 Smart Quote v1.1 — IronAsia Marketplace
+# 🧠 Smart Quote v1.2 — IronAsia Marketplace
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)
 ![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4.1-38BDF8?logo=tailwindcss&logoColor=white)
@@ -7,37 +7,44 @@
 ![Supabase](https://img.shields.io/badge/Supabase-Edge%20DB-3FCF8E?logo=supabase&logoColor=white)
 ![Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?logo=vercel)
 
-Smart Quote **v1.1** is the intelligent quotation system for **IronAsia Marketplace** — a next-generation B2B procurement platform that matches and ranks supplier responses based on **product completeness**, **quantity accuracy**, and **price competitiveness**.
+Smart Quote **v1.2** is the intelligent quotation and ranking engine for **IronAsia Marketplace** — a next-generation B2B procurement platform that now operates on **item-level precision** using `item_id` instead of `sq_id`, delivering cleaner blast logic, more accurate supplier responses, and a smoother user experience.
 
-> 🆕 Version **1.1.0 (Nov 2025)** introduces **IronAsia Token with eWallet and Transaction System** — allowing secure token-based actions for Top-Up and Get Contact.
+> 🆕 Version **1.2.0 (Nov 2025)** introduces:
+> - **Item-based blast and response logic (using `item_id`)**  
+> - **Refined ResultSQ UI with request/response breakdown**  
+> - **Optimized token behavior for Get Contact (no double charges)**  
 
 ---
 
-## 🚀 Key Features
+## 🚀 Key Updates in v1.2
 
-### 💡 Smart Quotation Workflow
-- Multi-area request handling  
-- Product-based itemization (free-text supported)  
-- Ranking algorithm based on:
-  - Product name normalization
-  - Quantity match
-  - Lowest price scoring  
-- Supplier contact reveal system (with token balance deduction)
+### ⚙️ Backend Improvements
+- Refactored all related APIs (`/api/blast`, `/api/supplier/inbox`, `/api/smart-quotes/responses`, etc.)  
+  → Now operate based on `item_id` for higher data accuracy per product item.
+- Optimized join logic in queries for more efficient supplier ranking.
 
-### 💰 IronAsia Token System (v1.1)
-- 1 Token = Rp 1.000  
-- `/api/tokens/add` → Top-Up tokens (add to eWallet)  
-- `/api/tokens/consume` → Spend tokens when revealing contact  
-- `/api/tokens/balance` → Retrieve user token balance  
-- `/api/tokens/transaction` → Record transaction history (Top-Up or Get Contact)  
-- Secure balance control to prevent negative tokens  
-- Confirmation modals for every token spending  
+### 🧩 ResultSQ Page Redesign
+- Added **Product Request** and **Product Response** columns with visual note separation.  
+- Introduced better grouping per area and product.  
+- Clearer ranking layout with badges (`🥇`, `🥈`, `🥉`) and improved readability.  
+- **“Best Price”** tag now applied per product item instead of per SQ group.
 
-### 🧩 Modular Components
-- **`ConfirmSpendModal.tsx`** – Confirmation before spending tokens  
-- **`TopUpModal.tsx`** – Token recharge with preview balance  
-- **`ItemTable.tsx`** – Smart item rehydration without page reload  
-- **`ResultSQPage.tsx`** – Dynamic area & product ranking visualization  
+### 💰 Token Behavior Update
+- Clicking **“Get Contact”** now opens the contact modal **immediately** (no token deduction).  
+- Token confirmation (`ConfirmSpendModal`) appears **only when the user checks “Tampilkan kontak”**.  
+- Once a supplier contact is revealed, **no additional tokens** are consumed on reaccess.
+
+---
+
+## 💡 Core Features
+
+- Multi-area and multi-product quotation management  
+- Smart ranking algorithm based on:
+  - Product name normalization  
+  - Quantity matching score  
+  - Price competitiveness scoring  
+- Token-based eWallet system for controlled supplier contact reveals  
+- Modular and responsive UI with Tailwind 4.1
 
 ---
 
@@ -50,8 +57,8 @@ Smart Quote **v1.1** is the intelligent quotation system for **IronAsia Marketpl
 | Language | TypeScript 5.6 |
 | Backend | Go Echo API (integration ready) |
 | Database | PostgreSQL |
-| ORM / Query | Raw SQL + CTE-based optimization |
-| Hosting | Vercel / Supabase / Railway (recommended) |
+| ORM / Query | Raw SQL + CTE Optimization |
+| Hosting | Vercel / Supabase / Railway |
 
 ---
 
@@ -62,14 +69,15 @@ Smart Quote **v1.1** is the intelligent quotation system for **IronAsia Marketpl
 - `tbl_smart_quotation_item`
 - `tbl_smart_quotation_response`
 - `tbl_token`
+- `tbl_ewallet`
+- `tbl_transaction`
 - `tbl_user`
-- 🆕 `tbl_ewallet`
-- 🆕 `tbl_transaction`
 
-**Functions:**
+**Core Functions:**
 - `insert_smart_quotation_item()`
 - `update_token_balance()`
-- `next_subject_help_code()` (utility)
+- `insert_smart_quotation_response()`
+- `next_subject_help_code()`
 
 ---
 
@@ -101,14 +109,14 @@ App will be available at:
 
 | Endpoint | Method | Description |
 |-----------|---------|-------------|
-| /api/results | GET | Fetch ranked supplier responses |
-| /api/results/mark-contact | PUT | Mark supplier contact as revealed |
-| /api/tokens/add | POST | Add token balance |
-| /api/tokens/consume | POST | Deduct token balance |
-| /api/tokens/balance | GET | Retrieve user token balance |
-| /api/tokens/transaction | GET | Get transaction history |
-| /api/smart-quotes/list | GET | Get quotation list |
-| /api/smart-quotes/[id]/items | GET/POST | Manage quotation items |
+| `/api/results` | GET | Fetch ranked supplier responses per item |
+| `/api/results/mark-contact` | PUT | Mark supplier contact as revealed |
+| `/api/tokens/add` | POST | Add token balance |
+| `/api/tokens/consume` | POST | Deduct token balance (on contact reveal) |
+| `/api/tokens/balance` | GET | Retrieve user token balance |
+| `/api/smart-quotes/responses` | GET/POST | Handle supplier responses per item_id |
+| `/api/blast` | POST | Blast quotations to suppliers per item |
+| `/api/supplier/inbox` | GET | Fetch pending supplier requests |
 
 ---
 
@@ -116,8 +124,9 @@ App will be available at:
 
 | Version | Date | Description |
 |----------|------|-------------|
-| **v1.0.0** | Nov 2025 | Initial full release with token economy, multi-area, and free-text product support. |
-| **v1.1.0** | Nov 2025 | Added eWallet + Transaction System for IronAsia Token (1 token = Rp 1.000). |
+| **v1.0.0** | Nov 2025 | Initial release with multi-area and free-text product support. |
+| **v1.1.0** | Nov 2025 | Introduced eWallet + Transaction System for IronAsia Token. |
+| **v1.2.0** | Nov 2025 | Migrated to item_id-based operations, redesigned ResultSQ UI, and improved token logic. |
 
 ---
 
