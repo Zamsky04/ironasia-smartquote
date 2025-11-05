@@ -7,15 +7,19 @@ type Supplier = { id: string; name: string };
 type InboxRow = {
   blast_id: number;
   sq_id: number;
+  item_id: number;                  
   customer_id: string;
   customer_name: string;
   area_code: number;
   area_name: string;
   category_code: number;
   category_name: string;
-  requested_names: string;   
+  requested_product_name: string;   
+  requested_size: string | null;    
+  unit_name: string;                
   requested_qty: number;
   sq_created_date: string;
+  requested_note?: string | null;
 
   response_product_name?: string | null;
   response_qty?: number | null;
@@ -185,42 +189,45 @@ export default function SupplierInboxPage() {
               <table className="min-w-[720px] w-full text-sm">
                 <thead>
                   <tr className="text-left bg-gray-100 text-gray-700">
+                    <th className="p-2">Item ID</th>
                     <th className="p-2">Category</th>
-                    <th className="p-2">Requested (names)</th>
+                    <th className="p-2">Product (requested)</th>
+                    <th className="p-2">Size</th>
+                    <th className="p-2">Unit</th>
                     <th className="p-2 text-right">Requested Qty</th>
+                    <th className="p-2">Request Note</th>
                     <th className="p-2">Price (offer)</th>
                     <th className="p-2">Note (supplier)</th>
                     <th className="p-2">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((it) => (
+                  {items
+                  .slice()
+                  .sort((a, b) =>
+                    a.item_id === b.item_id ? b.blast_id - a.blast_id : a.item_id - b.item_id
+                  )
+                  .map((it) => (
                     <tr
-                      key={k("row", it.sq_id, it.category_code, supplierId, it.blast_id)}
+                      key={`sq${it.sq_id}-blast${it.blast_id}-item${it.item_id}`} // <- unik & stabil
                       className="border-t hover:bg-gray-50"
                     >
-                      <td className="p-2 text-gray-900">
-                        {it.category_name} ({it.category_code})
-                      </td>
-                      <td className="p-2 text-gray-900">
-                        {it.requested_names || <span className="text-gray-400 italic">-</span>}
-                      </td>
-                      <td className="p-2 text-right text-gray-900">{it.requested_qty ?? "-"}</td>
+                      <td className="p-2">{it.item_id}</td>
+                      <td className="p-2 text-gray-900">{it.category_name} ({it.category_code})</td>
+                      <td className="p-2 text-gray-900">{it.requested_product_name}</td>
+                      <td className="p-2">{it.requested_size || "-"}</td>
+                      <td className="p-2">{it.unit_name}</td>
+                      <td className="p-2 text-right">{it.requested_qty ?? "-"}</td>
+                      <td className="p-2">{it.requested_note || <span className="text-gray-400 italic">-</span>}</td>
                       <td className="p-2">
                         {typeof it.response_price === "number"
                           ? new Intl.NumberFormat("id-ID").format(it.response_price)
                           : <span className="text-gray-400 italic">diisi saat Response</span>}
                       </td>
-                      <td className="p-2">
-                        {it.response_note ? it.response_note : <span className="text-gray-400 italic">opsional</span>}
-                      </td>
+                      <td className="p-2">{it.response_note || <span className="text-gray-400 italic">opsional</span>}</td>
                       <td className="p-2">
                         {typeof it.response_price === "number" ? (
-                          <button
-                            className="px-2 py-1 rounded bg-green-300 text-white cursor-not-allowed"
-                            disabled
-                            title="Response sudah dikirim. Edit dinonaktifkan."
-                          >
+                          <button className="px-2 py-1 rounded bg-green-300 text-white cursor-not-allowed" disabled title="Response sudah dikirim. Edit dinonaktifkan.">
                             Submitted
                           </button>
                         ) : (

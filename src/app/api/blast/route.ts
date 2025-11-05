@@ -1,3 +1,4 @@
+// /api/blast/route.ts
 import { NextResponse } from "next/server";
 import { getPool } from "@/app/lib/db";
 
@@ -10,16 +11,29 @@ export async function GET(req: Request) {
   const { rows } = await pool.query(
     `
     SELECT
-      b.blast_id, b.sq_id,
-      b.area_code, a.area_name,
-      b.category_code, c.category_name,
-      b.supplier_id, u.name AS supplier_name,
+      b.blast_id,
+      i.sq_id,
+      i.item_id,
+      i.category_code,
+      cat.category_name,
+      i.product_name,
+      i.size,
+      i.unit_id,
+      un.unit_name,
+      i.quantity        AS requested_qty,
+      i.note            AS requested_note,   -- ⬅️ NOTE PER ITEM
+      b.area_code,
+      ar.area_name,
+      b.supplier_id,
+      su.name           AS supplier_name,
       b.created_date
     FROM public.tbl_blast b
-    JOIN public.tbl_area a ON a.area_code = b.area_code
-    JOIN public.tbl_category_product c ON c.category_code = b.category_code
-    JOIN public.tbl_user u ON u.user_id = b.supplier_id
-    WHERE ($1::int  IS NULL OR b.sq_id = $1::int)
+    JOIN public.tbl_smart_quotation_item i ON i.item_id = b.item_id
+    JOIN public.tbl_category_product cat   ON cat.category_code = i.category_code
+    JOIN public.tbl_unit un                ON un.unit_id = i.unit_id
+    JOIN public.tbl_area ar                ON ar.area_code = b.area_code
+    JOIN public.tbl_user su                ON su.user_id = b.supplier_id
+    WHERE ($1::int  IS NULL OR i.sq_id = $1::int)
       AND ($2::text IS NULL OR b.supplier_id = $2::text)
     ORDER BY b.created_date DESC, b.blast_id DESC
     `,

@@ -31,10 +31,15 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       [sqid, status, updated_by || "admin"]
     );
 
-    const { rows } = await pool.query(
-      `SELECT COUNT(*)::int AS blasts FROM public.tbl_blast WHERE sq_id=$1`,
-      [sqid]
-    );
+  const { rows } = await pool.query(
+    `
+    SELECT COUNT(*)::int AS blasts
+    FROM public.tbl_blast b
+    JOIN public.tbl_smart_quotation_item i ON i.item_id = b.item_id
+    WHERE i.sq_id = $1
+    `,
+    [sqid]
+  );
 
     return NextResponse.json({
       ok: true,

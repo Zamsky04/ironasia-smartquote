@@ -6,22 +6,25 @@ import ConfirmSpendModal from "../smartquote/components/ConfirmSpendModal";
 type Customer = { id: string; name: string };
 type ResultRow = {
   sq_id: number;
-  area_code: number;          
-  area_name: string;          
+  area_code: number;
+  area_name: string;
   category_code: number;
-  product_name: string;
+  product_name: string;     
+  req_note?: string;        
   supplier_id: string;
   supplier_name: string;
   req_qty: number;
   resp_qty: number;
   price: number;
-  qty_point: number;
-  price_point: number;
-  total_point: number;
+  qty_point: number;         
+  price_point: number;       
+  total_point: number;       
   rank_no: number;
   resp_product_name?: string;
   name_matched?: boolean;
+  resp_note?: string;
 };
+
 type Contact = {
   user_id: string; name: string; email: string; phone_number: string; address: string;
 };
@@ -495,12 +498,10 @@ export default function ResultSQPage() {
                         <th className="p-2">Rank</th>
                         <th className="p-2">Supplier</th>
                         <th className="p-2">SQID</th>
-                        <th className="p-2">Product</th>
+                        <th className="p-2">Product Request</th>
+                        <th className="p-2">Product Response</th>
                         <th className="p-2 text-right">Quantity (req / resp)</th>
                         <th className="p-2 text-right">Price</th>
-                        <th className="p-2 text-center">Point (qty)</th>
-                        <th className="p-2 text-center">Point (price)</th>
-                        <th className="p-2 text-center">Total</th>
                         <th className="p-2 text-center">Action</th>
                       </tr>
                     </thead>
@@ -533,72 +534,58 @@ export default function ResultSQPage() {
 
                             <td className="p-2">{it.sq_id}</td>
 
+                            {/* Product Request */}
                             <td className="p-2 text-gray-900">
                               <div className="font-medium">{it.product_name}</div>
-                              {it.name_matched === false && it.resp_product_name && (
-                                <div className="text-xs text-gray-500">
-                                  response supplier: <span className="italic">{it.resp_product_name}</span>
-                                </div>
-                              )}
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {it.req_note ? <>note: <span className="italic">{it.req_note}</span></> : <span className="italic text-gray-400">—</span>}
+                              </div>
                             </td>
 
+                            {/* Product Response */}
+                            <td className="p-2 text-gray-900">
+                              <div className="font-medium">
+                                {it.resp_product_name ? it.resp_product_name : <span className="italic text-gray-400">—</span>}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {it.resp_note ? <>note: <span className="italic">{it.resp_note}</span></> : <span className="italic text-gray-400">—</span>}
+                              </div>
+                            </td>
+
+                            {/* Quantity */}
                             <td className="p-2 text-right">
                               {it.req_qty} / <span className="text-gray-900">{it.resp_qty}</span>
                             </td>
 
+                            {/* Price */}
                             <td className="p-2 text-right">
                               {formatIDR(it.price)}
-                              {bestPrice && (
+                              {it.price_point === 1 && (
                                 <span className="ml-2 rounded-full bg-emerald-600/10 text-emerald-700 px-2 py-0.5 text-[11px]">
                                   Best price
                                 </span>
                               )}
                             </td>
 
-                            <td className="p-2 text-center">{it.qty_point}</td>
-                            <td className="p-2 text-center">{it.price_point}</td>
-
-                            <td className="p-2 text-center">
-                              <span className="inline-flex items-center rounded-full bg-gray-900 text-white px-2 py-0.5 text-[12px]">
-                                {it.total_point}
-                              </span>
-                            </td>
-
                             <td className="p-2 text-center">
                               <button
                                 onClick={() => {
-                                  // siapkan teaser utk modal
-                                  setConfirmExtra({
-                                    productName: it.product_name,
-                                    areaName: g.areas.get(areaCode)?.areaName,
-                                    rankNo: it.rank_no,
-                                    bestPrice: it.price_point === 1,
-                                    qtyMatched: it.qty_point === 1,
-                                  });
-
-                                  // siapkan konteks reveal
-                                  setConfirmCtx({
+                                  // buka modal kontak saja
+                                  openContactModal({
                                     sq_id,
                                     product_id: pid,
                                     supplier_id: it.supplier_id,
                                     supplier_name: it.supplier_name,
                                   });
-
-                                  // saldo cukup? buka Confirm; kalau tidak, buka Top-Up
-                                  if (canAffordReveal(customerToken)) {
-                                    setConfirmOpen(true);
-                                  } else {
-                                    setTopupOpen(true);
-                                  }
                                 }}
                                 className={
                                   "px-3 py-1 rounded border transition " +
-                                  (isWinner
+                                  (it.rank_no === 1
                                     ? "bg-blue-600 border-blue-600 text-white hover:bg-blue-700"
                                     : "bg-white hover:bg-gray-100")
                                 }
                               >
-                                Get Contact
+                                {contacts[keyOf(sq_id, pid, it.supplier_id)]?.reveal ? "View Contact" : "Get Contact"}
                               </button>
                             </td>
                           </tr>
@@ -677,20 +664,24 @@ export default function ResultSQPage() {
                       checked={!!contacts[modal.key]?.reveal}
                       disabled={!!contacts[modal.key]?.reveal}  // setelah terbuka, tidak bisa “unreveal”
                       onChange={(e) => {
-                        // Kalau sudah reveal, abaikan (checkbox dikunci).
-                        if (contacts[modal.key!]?.reveal) return;
+                        if (contacts[modal.key!]?.reveal) return; // sudah reveal -> tidak perlu apa-apa
 
-                        // User mencoba centang -> cek saldo
                         if (e.target.checked) {
+                          // siapkan context untuk ConfirmSpendModal
                           setConfirmCtx({
                             sq_id: modal.sq_id!,
                             product_id: modal.product_id!,
                             supplier_id: modal.supplier_id!,
-                            supplier_name: modal.title, // optional
+                            supplier_name: modal.supplier_id!, // atau isi nama jika kamu simpan di state modal
                           });
 
-                          // siapkan teaser
-                          const row = rows.find(r => r.sq_id === modal.sq_id && r.supplier_id === modal.supplier_id);
+                          // siapkan teaser info
+                          const row = rows.find(r =>
+                            r.sq_id === modal.sq_id &&
+                            r.supplier_id === modal.supplier_id &&
+                            // opsional: cek juga product key kalau mau lebih presisi
+                            true
+                          );
                           setConfirmExtra({
                             productName: row?.product_name,
                             areaName: row?.area_name,
@@ -702,16 +693,11 @@ export default function ResultSQPage() {
                           if (canAffordReveal(customerToken)) {
                             setConfirmOpen(true);
                           } else {
-                            // saldo kurang -> arahkan ke Top-Up
                             setTopupOpen(true);
                           }
-
-                          // penting: karena ini controlled checkbox (checked = reveal),
-                          // React akan segera merender ulang dan mengembalikan ke `false`
-                          // sehingga tampilan tidak “terlanjur” tercentang.
+                          // checkbox akan kembali tidak tercentang saat re-render sampai confirm sukses
                         }
                       }}
-
                     />
                     <label htmlFor="reveal-contact" className="text-sm">Tampilkan kontak</label>
                   </div>

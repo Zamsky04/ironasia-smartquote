@@ -1,18 +1,23 @@
 "use client";
 import React, { useEffect, useState } from "react";
 
+// type
 type InboxRow = {
   blast_id: number;
   sq_id: number;
+  item_id: number;                  
   customer_id: string;
   customer_name: string;
   area_code: number;
   area_name: string;
   category_code: number;
   category_name: string;
-  requested_names: string;   // gabungan dari items category tsb
+  requested_product_name: string;   
+  requested_size: string | null;    
+  unit_name: string;                
   requested_qty: number;
   sq_created_date: string;
+  requested_note?: string | null;
 
   response_product_name?: string | null;
   response_qty?: number | null;
@@ -20,6 +25,7 @@ type InboxRow = {
   response_note?: string | null;
   response_created_date?: string | null;
 };
+
 
 export default function SupplierResponseModal(
   {
@@ -59,7 +65,7 @@ export default function SupplierResponseModal(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sq_id: row.sq_id,
+          item_id: row.item_id,            
           customer_id: row.customer_id,
           area_code: row.area_code,
           category_code: row.category_code,
@@ -109,11 +115,15 @@ export default function SupplierResponseModal(
             <div><div className="text-gray-500">Customer</div><div className="font-medium">{row.customer_name} ({row.customer_id})</div></div>
             <div><div className="text-gray-500">Area</div><div className="font-medium">{row.area_name} ({row.area_code})</div></div>
             <div><div className="text-gray-500">Category</div><div className="font-medium">{row.category_name} ({row.category_code})</div></div>
-            <div className="col-span-2">
+            <div>
               <div className="text-gray-500">Requested (customer)</div>
-              <div className="font-medium">{row.requested_names || "-"}</div>
+              <div className="font-medium">{row.requested_product_name || "-"}</div>
             </div>
             <div><div className="text-gray-500">Requested Qty (sum)</div><div className="font-medium">{row.requested_qty ?? "-"}</div></div>
+            <div className="col-span-2">
+              <div className="text-gray-500">Customer Note</div>
+              <div className="font-medium">{row.requested_note || "-"}</div>
+            </div>
           </div>
 
           <label className="block">
