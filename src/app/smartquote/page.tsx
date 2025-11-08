@@ -11,7 +11,6 @@ export default function SmartQuotePage() {
   const [customerId, setCustomerId] = useState<string>("");
   const [refresh, setRefresh] = useState(0);
 
-  // Modal state
   const [openNewHeader, setOpenNewHeader] = useState(false);
   const [openAddItem, setOpenAddItem] = useState(false);
   const [newSqId, setNewSqId] = useState<number | null>(null);
@@ -24,7 +23,6 @@ export default function SmartQuotePage() {
     })();
   }, []);
 
-  // Setelah header dibuat -> buka AddItemModal langsung
   const handleCreatedHeader = (sqid: number) => {
     setNewSqId(sqid);
     setOpenAddItem(true);
@@ -39,8 +37,13 @@ export default function SmartQuotePage() {
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
-      <div className="mx-auto max-w-6xl p-6 space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Smart Quotation</h1>
+      <div className="mx-auto max-w-7xl p-6 space-y-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Smart Quotation</h1>
+            <p className="text-sm text-gray-600">Kelola permintaan & sebaran penawaran supplier secara terstruktur.</p>
+          </div>
+        </div>
 
         {/* Top bar: pilih customer + add header */}
         <div className="rounded-2xl border border-gray-200 p-4 bg-white shadow-sm">
@@ -48,7 +51,7 @@ export default function SmartQuotePage() {
             <div>
               <label className="text-sm text-gray-700">Customer</label>
               <select
-                className="w-full border border-gray-300 rounded p-2 bg-white text-gray-900"
+                className="w-full border border-gray-300 rounded-xl p-2 bg-white text-gray-900"
                 value={customerId}
                 onChange={(e) => setCustomerId(e.target.value)}
               >
@@ -59,7 +62,7 @@ export default function SmartQuotePage() {
               </select>
             </div>
             <button
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl disabled:opacity-50 shadow-sm"
               disabled={!customerId}
               onClick={() => setOpenNewHeader(true)}
             >

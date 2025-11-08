@@ -1,4 +1,3 @@
-// app/api/results/route.ts
 import { NextResponse } from "next/server";
 import { getPool } from "@/app/lib/db";
 
@@ -19,12 +18,10 @@ export async function GET(req: Request) {
     params.push(Number(itemIdRaw));
     itemFilter = `AND i.item_id = $2::int`;
   }
-
   const topParamIndex = itemIdRaw ? 3 : 2;
   const whereRank = useTop ? `WHERE s.rank_no <= $${topParamIndex}::int` : "";
 
   const sql = `
-    /* Item milik customer */
     WITH req AS (
       SELECT
         i.item_id,
@@ -33,13 +30,13 @@ export async function GET(req: Request) {
         i.product_name                   AS req_product_name,
         LOWER(TRIM(i.product_name))      AS req_name_norm,
         i.quantity                       AS req_qty,
-        i.note                           AS req_note          -- ⬅️ ambil note permintaan
+        i.note                           AS req_note
       FROM public.tbl_smart_quotation_item i
       JOIN public.tbl_smart_quotation sq ON sq.sq_id = i.sq_id
       WHERE sq.customer_id = $1::text
       ${itemFilter}
     ),
-    /* Semua response untuk item di atas */
+
     resp AS (
       SELECT
         r.item_id,
@@ -58,7 +55,7 @@ export async function GET(req: Request) {
       LEFT JOIN public.tbl_user u ON u.user_id = r.supplier_id
       LEFT JOIN public.tbl_area a ON a.area_code = r.area_code
     ),
-    /* Join & flag */
+
     joined AS (
       SELECT
         q.item_id, q.sq_id, q.category_code,
@@ -71,45 +68,66 @@ export async function GET(req: Request) {
       FROM req q
       JOIN resp r ON r.item_id = q.item_id
     ),
-    /* Min price (hanya yg match nama & qty) */
+
     with_min AS (
       SELECT
         j.*,
-        MIN(j.price) FILTER (
-          WHERE j.name_matched = TRUE AND j.resp_qty = j.req_qty
-        ) OVER (PARTITION BY j.item_id, j.area_code) AS min_price_match
+        MIN(j.price) FILTER (WHERE j.name_matched = TRUE AND j.resp_qty = j.req_qty)
+          OVER (PARTITION BY j.item_id, j.area_code) AS min_price_match
       FROM joined j
     ),
-    /* Skor & ranking */
+
     scored AS (
       SELECT
-        *,
-        CASE WHEN name_matched = TRUE AND resp_qty = req_qty THEN 1 ELSE 0 END AS qty_point,
-        CASE WHEN name_matched = TRUE AND resp_qty = req_qty AND price = min_price_match THEN 1 ELSE 0 END AS price_point,
+        w.*,
+
+        -- Poin kuantitas: 1 jika nama cocok & qty pas
+        CASE WHEN w.name_matched = TRUE AND w.resp_qty = w.req_qty THEN 1 ELSE 0 END AS qty_point,
+
+        -- Poin harga: 1 jika kandidat exact match dan harganya sama dengan min price exact match
+        CASE
+          WHEN w.name_matched = TRUE AND w.resp_qty = w.req_qty AND w.price = w.min_price_match THEN 1
+          ELSE 0
+        END AS price_point,
+
+        -- Total poin
         (
-          CASE WHEN name_matched = TRUE AND resp_qty = req_qty THEN 1 ELSE 0 END +
-          CASE WHEN name_matched = TRUE AND resp_qty = req_qty AND price = min_price_match THEN 1 ELSE 0 END
+          CASE WHEN w.name_matched = TRUE AND w.resp_qty = w.req_qty THEN 1 ELSE 0 END +
+          CASE WHEN w.name_matched = TRUE AND w.resp_qty = w.req_qty AND w.price = w.min_price_match THEN 1 ELSE 0 END
         ) AS total_point,
+
+        -- Bucket untuk urutan ranking
+        CASE
+          WHEN w.name_matched = TRUE AND w.resp_qty = w.req_qty THEN 0
+          WHEN w.name_matched = TRUE THEN 1
+          ELSE 2
+        END AS rank_bucket,
+
         ROW_NUMBER() OVER (
-          PARTITION BY item_id, area_code
+          PARTITION BY w.item_id, w.area_code
           ORDER BY
-            (
-              CASE WHEN name_matched = TRUE AND resp_qty = req_qty THEN 1 ELSE 0 END +
-              CASE WHEN name_matched = TRUE AND resp_qty = req_qty AND price = min_price_match THEN 1 ELSE 0 END
-            ) DESC,
-            price ASC,
-            supplier_id ASC
+            -- 1) exact match (nama & qty) dulu
+            CASE
+              WHEN w.name_matched = TRUE AND w.resp_qty = w.req_qty THEN 0
+              WHEN w.name_matched = TRUE THEN 1
+              ELSE 2
+            END ASC,
+            -- 2) dalam exact match: harga termurah menang
+            w.price ASC,
+            -- 3) tie breaker stabil
+            w.supplier_id ASC
         ) AS rank_no
-      FROM with_min
+      FROM with_min w
     )
+
     SELECT
       s.item_id,
       s.sq_id,
       s.area_code,
       s.area_name,
       s.category_code,
-      s.req_product_name        AS product_name,
-      s.req_note,                                      -- ⬅️ keluarkan request note
+      s.req_product_name AS product_name,
+      s.req_note,
       s.supplier_id,
       s.supplier_name,
       s.req_qty,
