@@ -1,4 +1,4 @@
-# 🧠 Smart Quote v1.2 — IronAsia Marketplace
+# 🧠 Smart Quote v1.2.1 — IronAsia Marketplace
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)
 ![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4.1-38BDF8?logo=tailwindcss&logoColor=white)
@@ -7,44 +7,49 @@
 ![Supabase](https://img.shields.io/badge/Supabase-Edge%20DB-3FCF8E?logo=supabase&logoColor=white)
 ![Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?logo=vercel)
 
-Smart Quote **v1.2** is the intelligent quotation and ranking engine for **IronAsia Marketplace** — a next-generation B2B procurement platform that now operates on **item-level precision** using `item_id` instead of `sq_id`, delivering cleaner blast logic, more accurate supplier responses, and a smoother user experience.
+---
 
-> 🆕 Version **1.2.0 (Nov 2025)** introduces:
-> - **Item-based blast and response logic (using `item_id`)**  
-> - **Refined ResultSQ UI with request/response breakdown**  
-> - **Optimized token behavior for Get Contact (no double charges)**  
+> **Smart Quote** is the intelligent quotation and supplier ranking engine for **IronAsia Marketplace** —  
+> a next-generation B2B procurement platform operating on **item-level precision** using `item_id` for  
+> quotation, supplier response, and ranking logic.
 
 ---
 
-## 🚀 Key Updates in v1.2
+## 🚀 Highlights in v1.2.1 (Nov 2025)
 
-### ⚙️ Backend Improvements
-- Refactored all related APIs (`/api/blast`, `/api/supplier/inbox`, `/api/smart-quotes/responses`, etc.)  
-  → Now operate based on `item_id` for higher data accuracy per product item.
-- Optimized join logic in queries for more efficient supplier ranking.
+### 🧩 Functional Enhancements
+- Combined `tbl_transaction` and `tbl_ewallet` data for unified Token and Balance display.
+- Fixed incorrect or missing `amount` (NaN) issues on the transaction page.
+- Improved search, filtering, and manual refresh behavior on transaction pages.
+- Added clean user-friendly labels for description types (`Get Contact`, `Supplier Response`, etc.).
+- Refined `/api/tokens/transactions` for consistent result handling.
 
-### 🧩 ResultSQ Page Redesign
-- Added **Product Request** and **Product Response** columns with visual note separation.  
-- Introduced better grouping per area and product.  
-- Clearer ranking layout with badges (`🥇`, `🥈`, `🥉`) and improved readability.  
-- **“Best Price”** tag now applied per product item instead of per SQ group.
+### 🎨 UI/UX Improvements
+- Redesigned **Smart Quote**, **Supplier**, and **ResultSQ** pages for professional visual hierarchy.
+- Unified typography, spacing, and layout with TailwindCSS 4.1 standards.
+- Added card-based structure and light-mode readability improvements.
+- Removed 5s auto-refresh; now data reloads on-demand with better performance.
 
-### 💰 Token Behavior Update
-- Clicking **“Get Contact”** now opens the contact modal **immediately** (no token deduction).  
-- Token confirmation (`ConfirmSpendModal`) appears **only when the user checks “Tampilkan kontak”**.  
-- Once a supplier contact is revealed, **no additional tokens** are consumed on reaccess.
+### ⚙️ Backend Updates
+- Optimized API join logic (`tbl_transaction` + `tbl_ewallet`) for cleaner responses.
+- Standardized API structure under `/api/tokens/*` and `/api/smart-quotes/*`.
+- Improved error handling and database consistency across endpoints.
 
 ---
 
-## 💡 Core Features
+## 🧮 Core System Overview
 
-- Multi-area and multi-product quotation management  
-- Smart ranking algorithm based on:
-  - Product name normalization  
-  - Quantity matching score  
-  - Price competitiveness scoring  
-- Token-based eWallet system for controlled supplier contact reveals  
-- Modular and responsive UI with Tailwind 4.1
+### 💼 Smart Quote Workflow
+1. **Customer** creates a Smart Quotation (SQ) with product items, area, and quantity.  
+2. **System** “blasts” requests to matching suppliers based on area & category.  
+3. **Suppliers** respond with offers (price + quantity).  
+4. **ResultSQ** ranks responses automatically (price & quantity scoring).  
+5. **Customer** can reveal supplier contact using tokens.
+
+### 💰 Token System
+- Controlled via eWallet (`tbl_ewallet`, `tbl_transaction`)
+- Actions like “Get Contact” consume tokens (with confirmation)
+- “Top Up” updates token balance seamlessly via `/api/tokens/add`
 
 ---
 
@@ -52,32 +57,49 @@ Smart Quote **v1.2** is the intelligent quotation and ranking engine for **IronA
 
 | Layer | Technology |
 |-------|-------------|
-| Frontend | Next.js 16 (App Router) |
-| Styling | TailwindCSS 4.1 |
-| Language | TypeScript 5.6 |
-| Backend | Go Echo API (integration ready) |
-| Database | PostgreSQL |
-| ORM / Query | Raw SQL + CTE Optimization |
-| Hosting | Vercel / Supabase / Railway |
+| **Frontend** | Next.js 16 (App Router) |
+| **Styling** | TailwindCSS 4.1 |
+| **Language** | TypeScript 5.6 |
+| **Backend** | Go (Echo Framework) — integration ready |
+| **Database** | PostgreSQL |
+| **ORM / Query** | Raw SQL + CTE Optimization |
+| **Hosting** | Vercel / Supabase / Railway |
 
 ---
 
-## 🧮 Database Schema Highlights
+## 📦 Database Schema Highlights
 
-**Core Tables:**
-- `tbl_smart_quotation`
-- `tbl_smart_quotation_item`
-- `tbl_smart_quotation_response`
-- `tbl_token`
-- `tbl_ewallet`
-- `tbl_transaction`
-- `tbl_user`
+### 🗃 Core Tables
+| Table | Description |
+|--------|--------------|
+| `tbl_smart_quotation` | Header of each quotation |
+| `tbl_smart_quotation_item` | Product items under SQ |
+| `tbl_smart_quotation_response` | Supplier responses |
+| `tbl_transaction` | Token transaction logs |
+| `tbl_ewallet` | Token balances |
+| `tbl_user` | User metadata (supplier, customer, admin) |
 
-**Core Functions:**
-- `insert_smart_quotation_item()`
-- `update_token_balance()`
-- `insert_smart_quotation_response()`
+### ⚙️ Core Functions
+- `insert_smart_quotation_item()`  
+- `update_token_balance()`  
+- `insert_smart_quotation_response()`  
 - `next_subject_help_code()`
+
+---
+
+## 🧭 API Routes Overview
+
+| Endpoint | Method | Description |
+|-----------|---------|-------------|
+| `/api/results` | `GET` | Fetch ranked supplier responses per item |
+| `/api/results/mark-contact` | `PUT` | Mark supplier contact as revealed |
+| `/api/tokens/add` | `POST` | Add token balance |
+| `/api/tokens/consume` | `POST` | Deduct token on contact reveal |
+| `/api/tokens/balance` | `GET` | Retrieve user token balance |
+| `/api/tokens/transactions` | `GET` | Fetch combined transaction + wallet data |
+| `/api/smart-quotes/responses` | `GET/POST` | Handle supplier responses |
+| `/api/blast` | `POST` | Blast quotations per item |
+| `/api/supplier/inbox` | `GET` | Fetch supplier’s pending requests |
 
 ---
 
@@ -91,17 +113,15 @@ cd ironasia-smartquote
 # 2. Install Dependencies
 npm install
 
-# 3. Setup Environment
-# Create file: .env.local
-# Then add your database credentials:
+# 3. Configure Environment
 echo "DATABASE_URL=postgresql://username:password@localhost:5432/ironasia_test" > .env.local
 echo "NEXT_PUBLIC_API_BASE=/api" >> .env.local
 
 # 4. Run Development Server
 npm run dev
 
-App will be available at:
-👉 http://localhost:3000
+# App will be available at:
+http://localhost:3000
 
 ```
 
